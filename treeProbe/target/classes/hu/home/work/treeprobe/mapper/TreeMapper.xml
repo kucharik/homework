@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+
+<!-- Namespace and java interface parity -->
+<mapper namespace="hu.home.work.treeprobe.mapper.TreeMapper">
+
+	<resultMap id="ItemMap" type="hu.home.work.treeprobe.dao.model.ItemNode">
+		<result property="id"                   javaType="java.lang.Integer" 	column="id" 			 jdbcType="INTEGER"    />
+		<result property="parentId"             javaType="java.lang.Integer" 	column="parent_id" 		 jdbcType="INTEGER" />
+		<result property="name"                 javaType="java.lang.String" 	column="name" 		     jdbcType="VARCHAR" />
+		<result property="treeId"               javaType="java.lang.Integer" 	column="tree_id" 		 jdbcType="INTEGER" />
+		<result property="version"              javaType="java.lang.Integer" 	column="version" 		 jdbcType="INTEGER" />
+		<result property="level"                javaType="java.lang.Integer" 	column="level_" 		 jdbcType="INTEGER" />
+		<result property="path"                  	column="path" 		 jdbcType="ARRAY" typeHandler="org.apache.ibatis.type.ArrayTypeHandler"/>
+	</resultMap>
+		
+<!-- 	<select id="callPcgCrmProcessTransfer" flushCache="true"> -->
+<!-- 		CALL PCG_CRM_PROCESS_TRANSFER.PROCESS_CAMPAIGN_INFO(#{promotionId}) -->
+<!-- 	</select>	 -->
+
+	<select id="getAllItems" flushCache="true" resultMap="ItemMap">
+		WITH RECURSIVE tree_ AS (
+		    SELECT
+		        items.id,
+		        items.parent_id,
+		        items.name,
+		        items.tree_id,
+		        items.version,
+		        1 as level_,
+		        ARRAY[items.id] as path
+		    FROM
+		        items
+		    WHERE
+		    	<if test="parentId != null">
+			        parent_id = #{parentId} and 
+				</if>
+				<if test="parentId == null">
+			        parent_id is NULL and 
+				</if>
+		        tree_id=#{treeId}
+		    UNION ALL
+		    SELECT
+		        items.id,
+		        items.parent_id,
+		        items.name,
+		        items.tree_id,
+		        items.version,
+		        tree_.level_ + 1,
+		        tree_.path || items.id
+		    FROM
+		        tree_ 
+		        JOIN items ON items.parent_id = tree_.id
+		)
+		SELECT
+		    *
+		FROM
+		    tree_
+<!-- 		where tree_id = 1     -->
+<!-- 		order by tree_id,id -->
+	</select>
+	
+<!-- 	a 'version' használata garantálja, hogy a legelső beérkező (és aktuális állapotot ismerő!) tranzakció tudja csak az állapotot módosítani versenyhelyzetben, minden más   -->
+<!--    próbálkozás tudni fogja, hogy nem ment végbe a tranzakció, mert már nem az aktuális állapotról tud...  -->
+	<update id="move" > 
+	   UPDATE items SET 
+	   		parent_id = #{newParent.id}, 
+	   		name = 'UPDATED',
+	   		version=nextval('ITEM_VERSION_SEQ')
+	   WHERE items.id = #{movable.id} and items.version=#{movable.version}
+	</update>
+	
+	
+	
+    <insert id="insertItem" parameterType="hu.home.work.treeprobe.dao.model.Item" flushCache="true" >
+		<selectKey keyProperty="version,id" keyColumn="version,id" resultType="hu.home.work.treeprobe.dao.model.Item" order="BEFORE">
+			SELECT nextval('ITEM_VERSION_SEQ') as version, nextval('items_id_seq') as id
+   		</selectKey>
+	
+		INSERT INTO items ( 
+				id,
+				name,
+				tree_id,
+				parent_id,
+				version			
+		) 
+   		VALUES (
+   			#{id},
+			#{name},
+			#{treeId},
+			#{parentId},
+			#{version}				
+   		)
+   		
+	</insert>
+	
+	
+	<select id="checkCircle" flushCache="true" resultType="java.lang.Integer">
+		 WITH RECURSIVE item_circle(id, parent_id, depth, path, cycle) AS (
+		        SELECT i.id, i.parent_id, 1,
+		          ARRAY[i.id],
+		          false
+		        FROM items i where parent_id=#{sub_tree_id}
+		      UNION ALL
+		        SELECT i.id, i.parent_id, ic.depth + 1,
+		          path || i.id,
+		          i.id = ANY(path)
+		        FROM items i, item_circle ic
+		        WHERE i.parent_id = ic.id AND NOT cycle
+		)
+		SELECT count(id) FROM item_circle where id=#{new_parent_id}
+	
+	</select>
+</mapper>

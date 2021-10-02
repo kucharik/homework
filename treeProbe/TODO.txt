@@ -1,0 +1,15 @@
+fagenerálás listából + cachelve
+lapozás
+elérési út generálása... (1.2.11.3)
+
+service layer 
+controller layer
+tranzakció kezelés
+exceptionHandler
+
+api-k artifactosítása
+multimodulmavenproject...
+
+javadoc
+
+gondolatok összeszedése
